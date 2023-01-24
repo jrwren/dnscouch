@@ -11,12 +11,21 @@ import (
 )
 
 var ServerMap = map[string]string{
-	"1.1.1.1":         "Cloudflare One",
-	"8.8.8.8":         "Google",
-	"9.9.9.9":         "Quad9 filtered",
-	"149.112.112.112": "Quad9 filtered",
-	"208.67.222.222":  "Opendns",
-	"208.67.220.220":  "Opendns",
+	"1.1.1.1": "Cloudflare One",
+	"1.0.0.1": "Cloudflare One",
+	"1.1.1.2": "Cloudflare Malware Filtered",
+	"1.0.0.2": "Cloudflare Malware Filtered",
+	"1.1.1.3": "Cloudflare Adult Filtered",
+	"1.0.0.3": "Cloudflare Adult Filtered",
+	"8.8.8.8": "Google Primary",
+	"8.8.4.4": "Google Secondary",
+	// TODO: ipv6
+	//	"[2001:4860:4860::8888]:53": "Google Primary",
+	//	"[2001:4860:4860::8844]:53": "Google Secondary",
+	"9.9.9.9":         "Quad9 filtered Primary",
+	"149.112.112.112": "Quad9 filtered Secondary",
+	"208.67.222.222":  "OpenDNS Primary",
+	"208.67.220.220":  "OpenDNS Secondary",
 	"4.2.2.1":         "Level 3",
 	"209.244.0.3":     "Level 3",
 	"209.244.0.4":     "Level 3",
@@ -27,18 +36,28 @@ var ServerMap = map[string]string{
 	"68.94.156.1":     "ATT Primary",
 	"68.94.157.1":     "ATT Secondary",
 	"12.121.117.201":  "ATT Services",
+	"8.26.56.26":      "Comodo Primary",
+	"8.20.247.20":     "Comodo Secondary",
+	"76.76.2.0":       "Control D Primary",
+	"76.76.10.0":      "Control D Secondary",
+	"185.228.168.9":   "Clean Browsing Primary",
+	"185.228.169.9":   "Clean Browsing Secondary",
+	"76.76.19.19":     "Alternate DNS Primary",
+	"76.223.122.150":  "Alternate DNS Secondary",
+	"94.140.14.14":    "AdGuard DNS Primary",
+	"94.140.15.15":    "AdGuard DNS Secondary",
 }
 
 // EnableComcast enables comcast DNS servers. They don't response from outside
 // the comcast network.
 func EnableComcast() {
 	comcast := map[string]string{
-		"75.75.75.75":           "Comcast Primary",
-		"75.75.76.76":           "Comcast Secondary",
-		"[2001:558:feed::1]:53": "Comcast Primary IPv6",
-		"[2001:558:feed::2]:53": "Comcast Secondary IPv6",
-		"68.87.85.102":          "Comcast older Primary",
-		"68.87.64.150":          "Comcast older Secondary",
+		"75.75.75.75": "Comcast Primary",
+		"75.75.76.76": "Comcast Secondary",
+		//		"[2001:558:feed::1]:53": "Comcast Primary IPv6",
+		//		"[2001:558:feed::2]:53": "Comcast Secondary IPv6",
+		"68.87.85.102": "Comcast older Primary",
+		"68.87.64.150": "Comcast older Secondary",
 	}
 	for s, p := range comcast {
 		ServerMap[s] = p
@@ -88,6 +107,32 @@ func LookupServers() (Results, error) {
 	times, err := TimeDNSLookupServers()
 	if err != nil {
 		return nil, err
+	}
+	for s, t := range times {
+		r = append(r, Result{s, ServerMap[s], t})
+	}
+	sort.Sort(r)
+	return r, nil
+}
+
+func LookupServersN(n int) (Results, error) {
+	var r Results
+	var allTimes []map[string]time.Duration
+	for i := 0; i < n; i++ {
+		t, err := TimeDNSLookupServers()
+		if err != nil {
+			return nil, err
+		}
+		allTimes = append(allTimes, t)
+	}
+	times := make(map[string]time.Duration, len(ServerMap))
+	for s := range ServerMap {
+		sum := int64(0)
+		for i := 0; i < n; i++ {
+			sum += int64(allTimes[i][s])
+		}
+		avg := sum / int64(n)
+		times[s] = time.Duration(avg)
 	}
 	for s, t := range times {
 		r = append(r, Result{s, ServerMap[s], t})

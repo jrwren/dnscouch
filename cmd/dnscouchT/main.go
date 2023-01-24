@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -50,13 +51,15 @@ func (m model) View() string {
 }
 
 func main() {
+	n := flag.Int("c", 1, "count - number of lookups to make per server")
+	flag.Parse()
 	columns := []table.Column{
 		{Title: "RTT", Width: 8},
 		{Title: "Server", Width: 15},
 		{Title: "Description", Width: 25},
 	}
 	rows := []table.Row{}
-	rs, err := dnscouch.LookupServers()
+	rs, err := dnscouch.LookupServersN(*n)
 	if err != nil {
 		log.Print("error:", err)
 	}
