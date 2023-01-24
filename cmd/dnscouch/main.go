@@ -1,10 +1,11 @@
 package main
 
 import (
-	"dnscouch"
 	"flag"
 	"fmt"
 	"log"
+
+	"github.com/jrwren/dnscouch"
 )
 
 func main() {

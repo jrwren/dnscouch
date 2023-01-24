@@ -1,4 +1,4 @@
-module dnscouch
+module github.com/jrwren/dnscouch
 
 go 1.19
 
