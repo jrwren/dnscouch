@@ -52,6 +52,7 @@ func (m model) View() string {
 
 func main() {
 	n := flag.Int("c", 1, "count - number of lookups to make per server")
+	tf := flag.Bool("t", false, "query NTP servers instead of DNS servers")
 	flag.Parse()
 	columns := []table.Column{
 		{Title: "RTT", Width: 8},
@@ -59,20 +60,35 @@ func main() {
 		{Title: "Description", Width: 25},
 	}
 	rows := []table.Row{}
-	rs, err := dnscouch.LookupServersN(*n)
-	if err != nil {
-		log.Print("error:", err)
-	}
-	for _, r := range rs {
-		ft := r.D.Round(10 * time.Microsecond)
-		rows = append(rows, table.Row{ft.String(), r.ServerName, r.Desc})
+	var rh int
+	switch *tf {
+	case false:
+		rs, err := dnscouch.LookupServersN(*n)
+		if err != nil {
+			log.Print("error:", err)
+		}
+		for _, r := range rs {
+			ft := r.D.Round(10 * time.Microsecond)
+			rows = append(rows, table.Row{ft.String(), r.ServerName, r.Desc})
+		}
+		rh = len(rs)
+	case true:
+		rs, err := dnscouch.LookupNTPServersN(*n)
+		if err != nil {
+			log.Print("error:", err)
+		}
+		for _, r := range rs {
+			ft := r.D.Round(10 * time.Microsecond)
+			rows = append(rows, table.Row{ft.String(), r.ServerName, r.Desc})
+		}
+		rh = len(rs)
 	}
 
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(len(rs)),
+		table.WithHeight(rh),
 	)
 
 	s := table.DefaultStyles()

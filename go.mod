@@ -6,6 +6,7 @@ require github.com/miekg/dns v1.1.50
 
 require (
 	github.com/aymanbagabas/go-osc52 v1.0.3 // indirect
+	github.com/beevik/ntp v0.3.0 // indirect
 	github.com/charmbracelet/bubbles v0.15.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
