@@ -53,6 +53,7 @@ func (m model) View() string {
 func main() {
 	n := flag.Int("c", 1, "count - number of lookups to make per server")
 	tf := flag.Bool("t", false, "query NTP servers instead of DNS servers")
+	useIPv6 := flag.Bool("6", false, "query IPv6 servers (DNS only)")
 	flag.Parse()
 	columns := []table.Column{
 		{Title: "RTT", Width: 8},
@@ -63,7 +64,11 @@ func main() {
 	var rh int
 	switch *tf {
 	case false:
-		rs, err := dnscouch.LookupServersN(*n)
+		dnsServers := dnscouch.ServerMap4
+		if *useIPv6 {
+			dnsServers = dnscouch.ServerMap6
+		}
+		rs, err := dnscouch.LookupServersN(dnsServers, *n)
 		if err != nil {
 			log.Print("error:", err)
 		}
