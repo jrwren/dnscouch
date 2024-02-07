@@ -2,6 +2,8 @@ package dnscouch
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"sort"
 	"strings"
@@ -11,14 +13,11 @@ import (
 	"github.com/miekg/dns"
 )
 
-var ServerMap = map[string]string{
-	"1.1.1.1": "Cloudflare One",
-	"1.0.0.1": "Cloudflare One",
-	"8.8.8.8": "Google Primary",
-	"8.8.4.4": "Google Secondary",
-	// TODO: ipv6
-	//	"[2001:4860:4860::8888]:53": "Google Primary",
-	//	"[2001:4860:4860::8844]:53": "Google Secondary",
+var ServerMap4 = map[string]string{
+	"1.1.1.1":        "Cloudflare One",
+	"1.0.0.1":        "Cloudflare One",
+	"8.8.8.8":        "Google Primary",
+	"8.8.4.4":        "Google Secondary",
 	"208.67.222.222": "OpenDNS Primary",
 	"208.67.220.220": "OpenDNS Secondary",
 	"4.2.2.1":        "Level 3",
@@ -41,6 +40,28 @@ var ServerMap = map[string]string{
 	"94.140.15.15":   "AdGuard DNS Secondary",
 }
 
+var ServerMap6 = map[string]string{
+	"[2606:4700:4700::1111]": "Cloudflare One",
+	"[2606:4700:4700::1001]": "Cloudflare One",
+	"[2001:4860:4860::8888]": "Google Primary",
+	"[2001:4860:4860::8844]": "Google Secondary",
+	"[2620:119:35::35]":      "OpenDNS Primary",
+	"[2620:119:53::53]":      "OpenDNS Secondary",
+	// Couldn't find IPv6 values for Level 3
+	"[2620:fe::fe]": "Quad9 unfiltered",
+	"[2620:fe::9]":  "Quad9 unfiltered",
+	// Couldn't find IPv6 values for ATT
+	// Couldn't find IPv6 values for Comodo
+	"[2606:1a40::]":       "Control D Primary",
+	"[2606:1a40:1::]":     "Control D Secondary",
+	"[2a0d:2a00:1::]":     "Clean Browsing Primary",
+	"[2a0d:2a00:2::]":     "Clean Browsing Secondary",
+	"[2602:fcbc::ad]":     "Alternate DNS Primary",
+	"[2602:fcbc:2::ad]":   "Alternate DNS Secondary",
+	"[2a10:50c0::ad1:ff]": "AdGuard DNS Primary",
+	"[2a10:50c0::ad2:ff]": "AdGuard DNS Secondary",
+}
+
 var FilteredServerMap = map[string]string{
 	"1.1.1.2":         "Cloudflare Malware Filtered",
 	"1.0.0.2":         "Cloudflare Malware Filtered",
@@ -58,7 +79,7 @@ var FilteredServerMap = map[string]string{
 
 // EnableComcast enables comcast DNS servers. They don't response from outside
 // the comcast network.
-func EnableComcast() {
+func EnableComcast(servers map[string]string) {
 	comcast := map[string]string{
 		"75.75.75.75": "Comcast Primary",
 		"75.75.76.76": "Comcast Secondary",
@@ -68,23 +89,27 @@ func EnableComcast() {
 		"68.87.64.150": "Comcast older Secondary",
 	}
 	for s, p := range comcast {
-		ServerMap[s] = p
+		servers[s] = p
 	}
 }
 
 func TimeDNSLookup(server string) (time.Duration, error) {
-	if !strings.Contains(server, ":") {
-		server = server + ":53"
+	if _, _, err := net.SplitHostPort(server); err != nil {
+		if !strings.Contains(err.Error(), "missing port in address") {
+			return 0, fmt.Errorf("TimeDNSLookup[%q]: %w", server, err)
+		}
+		server += ":53"
 	}
-	now := time.Now()
+
 	c := new(dns.Client)
 	m := new(dns.Msg)
 	m.SetQuestion("google.com.", dns.TypeA)
+	start := time.Now()
 	_, _, err := c.Exchange(m, server)
 	if errors.Is(err, os.ErrDeadlineExceeded) {
 		return 2 * time.Second, nil // miekg.dns timeout default is 2s.
 	}
-	return -time.Until(now), err
+	return time.Since(start), err
 }
 
 type Result struct {
@@ -98,9 +123,9 @@ func (a Results) Len() int           { return len(a) }
 func (a Results) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a Results) Less(i, j int) bool { return a[i].D < a[j].D }
 
-func TimeDNSLookupServers() (map[string]time.Duration, error) {
-	times := make(map[string]time.Duration, len(ServerMap))
-	for s := range ServerMap {
+func TimeDNSLookupServers(servers map[string]string) (map[string]time.Duration, error) {
+	times := make(map[string]time.Duration, len(servers))
+	for s := range servers {
 		t, err := TimeDNSLookup(s)
 		if err != nil {
 			return times, err
@@ -110,31 +135,31 @@ func TimeDNSLookupServers() (map[string]time.Duration, error) {
 	return times, nil
 }
 
-func LookupServers() (Results, error) {
+func LookupServers(servers map[string]string) (Results, error) {
 	var r Results
-	times, err := TimeDNSLookupServers()
+	times, err := TimeDNSLookupServers(servers)
 	if err != nil {
 		return nil, err
 	}
 	for s, t := range times {
-		r = append(r, Result{s, ServerMap[s], t})
+		r = append(r, Result{s, servers[s], t})
 	}
 	sort.Sort(r)
 	return r, nil
 }
 
-func LookupServersN(n int) (Results, error) {
+func LookupServersN(servers map[string]string, n int) (Results, error) {
 	var r Results
 	var allTimes []map[string]time.Duration
 	for i := 0; i < n; i++ {
-		t, err := TimeDNSLookupServers()
+		t, err := TimeDNSLookupServers(servers)
 		if err != nil {
 			return nil, err
 		}
 		allTimes = append(allTimes, t)
 	}
-	times := make(map[string]time.Duration, len(ServerMap))
-	for s := range ServerMap {
+	times := make(map[string]time.Duration, len(servers))
+	for s := range servers {
 		sum := int64(0)
 		for i := 0; i < n; i++ {
 			sum += int64(allTimes[i][s])
@@ -143,16 +168,16 @@ func LookupServersN(n int) (Results, error) {
 		times[s] = time.Duration(avg)
 	}
 	for s, t := range times {
-		r = append(r, Result{s, ServerMap[s], t})
+		r = append(r, Result{s, servers[s], t})
 	}
 	sort.Sort(r)
 	return r, nil
 }
 
-func TimeDNSLookupServersAvg(n int) (map[string]time.Duration, error) {
-	times := make(map[string]time.Duration, len(ServerMap))
+func TimeDNSLookupServersAvg(servers map[string]string, n int) (map[string]time.Duration, error) {
+	times := make(map[string]time.Duration, len(servers))
 	for i := 0; i < n; i++ {
-		for s := range ServerMap {
+		for s := range servers {
 			t, err := TimeDNSLookup(s)
 			if err != nil {
 				return times, err
