@@ -29,3 +29,5 @@ jobs:
               
     - name: Gosec Security Checker
       uses: securego/gosec@v2.19.0
+      with:
+          args: ./...
